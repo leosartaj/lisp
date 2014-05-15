@@ -42,7 +42,7 @@ struct lenv {
 enum {LVAL_NUM, LVAL_ERR, LVAL_SYM, LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR};
 
 lval* lval_num(long x);
-lval* lval_err(char* s);
+lval* lval_err(char* s, ...);
 lval* lval_sym(char* s);
 lval* lval_fun(lbuiltin fun);
 lval* lval_sexpr(void);
@@ -79,7 +79,12 @@ lval* builtin_join(lenv* e, lval* a);
 lval* lval_join(lval* x, lval* y);
 
 //defining a macro for error handling
-#define ERR_CHECK(arg, cond, err) if(!(cond)) { lval_del(arg); return lval_err(err); }
+#define ERR_CHECK(arg, cond, s, ...) \
+    if(!(cond)) { \
+        lval* err = lval_err(s, ##__VA_ARGS__); \
+        lval_del(arg); \
+        return err; \
+    } 
 
 
 int main(int argc, char** argv) {
@@ -146,11 +151,21 @@ lval* lval_num(long x) {
     return v;
 }
 
-lval* lval_err(char* s) {
+lval* lval_err(char* s, ...) {
     lval* v = malloc(sizeof(lval));
     v->type = LVAL_ERR;
-    v->err = malloc(strlen(s) + 1);
-    strcpy(v->err, s);
+
+    va_list list;
+    va_start(list, s);
+
+    v->err = malloc(512);
+
+    vsnprintf(v->err, 511, s, list);
+
+    v->err = realloc(v->err, strlen(v->err) + 1);
+
+    va_end(list);
+
     return v;
 }
 
@@ -541,8 +556,8 @@ lval* builtin_op(lenv* e, lval* v, char* op) {
 
 lval* builtin_head(lenv* e, lval* a) {
 
-    ERR_CHECK(a, (a->count == 1), "Function head passed more number of arguments");
-    ERR_CHECK(a, (a->cell[0]->type == LVAL_QEXPR), "Function head not passed correct type of argument");
+    ERR_CHECK(a, (a->count == 1), "Function head passed  '%d' arguments, expecting '%d'", a->count, 1);
+    ERR_CHECK(a, (a->cell[0]->type == LVAL_QEXPR), "Function head passed correct type of argument");
     ERR_CHECK(a, (a->count != 0), "Function head passed {}");
 
     lval* v = lval_take(a, 0);
@@ -556,7 +571,7 @@ lval* builtin_head(lenv* e, lval* a) {
 
 lval* builtin_tail(lenv* e, lval* a) {
 
-    ERR_CHECK(a, (a->count == 1), "Function tail passed more number of arguments");
+    ERR_CHECK(a, (a->count == 1), "Function tail passed '%d' arguments, expecting '%d'", a->count, 1);
     ERR_CHECK(a, (a->cell[0]->type == LVAL_QEXPR), "Function tail not passed correct type of argument");
     ERR_CHECK(a, (a->count != 0), "Function tail passed {}");
 
@@ -577,7 +592,7 @@ lval* builtin_list(lenv* e, lval* a) {
 }
 
 lval* builtin_eval(lenv* e, lval* a) {
-    ERR_CHECK(a, (a->count == 1), "Function eval passed too many arguments");
+    ERR_CHECK(a, (a->count == 1), "Function eval passed '%d' arguments, expecting '%d'", a->count, 1);
     ERR_CHECK(a, (a->cell[0]->type == LVAL_QEXPR), "Function eval passed invaild arguments");
 
     lval* x = lval_take(a, 0);
@@ -598,7 +613,7 @@ lval* builtin_def(lenv* e, lval* a) {
         ERR_CHECK(a, (syms->cell[i]->type == LVAL_SYM), "function def cannot define non-symbols");
     }
 
-    ERR_CHECK(a, (syms->count == (a->count - 1)), "incorrect number of values");
+    ERR_CHECK(a, (syms->count == (a->count - 1)), "incorrect number of values, variables passed '%d', values passed '%d'", syms->count, a->count - 1);
 
     for(int i = 0; i < syms->count; i++) {
         lenv_put(e, syms->cell[i], a->cell[i + 1]);
