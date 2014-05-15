@@ -74,11 +74,12 @@ lval* builtin_head(lenv* e, lval* a);
 lval* builtin_tail(lenv* e, lval* a);
 lval* builtin_list(lenv* e, lval* a);
 lval* builtin_eval(lenv* e, lval* a);
+lval* builtin_def(lenv* e, lval* a);
 lval* builtin_join(lenv* e, lval* a);
 lval* lval_join(lval* x, lval* y);
 
 //defining a macro for error handling
-#define ERR_CHECK(arg, cond, err) if(!(cond)) { lval_del(arg); lval_err(err); }
+#define ERR_CHECK(arg, cond, err) if(!(cond)) { lval_del(arg); return lval_err(err); }
 
 
 int main(int argc, char** argv) {
@@ -187,6 +188,7 @@ lval* lval_qexpr(void) {
 lval* lval_copy(lval* v) {
 
     lval* x = malloc(sizeof(lval));
+
     x->type = v->type;
 
     switch(v->type) {
@@ -328,6 +330,8 @@ void lenv_add_builtins(lenv* e) {
     lenv_add_builtin(e, "-", builtin_min);
     lenv_add_builtin(e, "/", builtin_div);
     lenv_add_builtin(e, "*", builtin_mul);
+
+    lenv_add_builtin(e, "def", builtin_def);
 }
 
 lval* lval_add(lval* v, lval* x) {
@@ -582,6 +586,26 @@ lval* builtin_eval(lenv* e, lval* a) {
 
     return lval_eval(e, x);
 
+}
+
+lval* builtin_def(lenv* e, lval* a) {
+
+    ERR_CHECK(a, (a->cell[0]->type == LVAL_QEXPR), "function def passed incorrect type");
+
+    lval* syms = a->cell[0];
+
+    for(int i = 0; i < syms->count; i++) {
+        ERR_CHECK(a, (syms->cell[i]->type == LVAL_SYM), "function def cannot define non-symbols");
+    }
+
+    ERR_CHECK(a, (syms->count == (a->count - 1)), "incorrect number of values");
+
+    for(int i = 0; i < syms->count; i++) {
+        lenv_put(e, syms->cell[i], a->cell[i + 1]);
+    }
+
+    lval_del(a);
+    return lval_sexpr();
 }
 
 lval* builtin_join(lenv* e, lval* a) {
